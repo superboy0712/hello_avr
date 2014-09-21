@@ -7,19 +7,22 @@ C_SRCS += \
 ../lcm_12864.c \
 ../main.c \
 ../oled.c \
-../usart.c 
+../usart.c \
+../widget.c 
 
 OBJS += \
 ./lcm_12864.o \
 ./main.o \
 ./oled.o \
-./usart.o 
+./usart.o \
+./widget.o 
 
 C_DEPS += \
 ./lcm_12864.d \
 ./main.d \
 ./oled.d \
-./usart.d 
+./usart.d \
+./widget.d 
 
 
 # Each subdirectory must supply rules for building sources it contributes

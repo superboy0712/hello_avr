@@ -26,7 +26,7 @@
 #define DC_HIGH set_bit(OLED_DC_PORT, OLED_DC_BIT)
 #define DC_LOW clr_bit(OLED_DC_PORT, OLED_DC_BIT)
 // some Marcos
-#define START_COL 6
+#define START_COL 5
 #define END_COL 121
 #define START_PAGE 0
 #define END_PAGE 6
@@ -36,7 +36,8 @@
 // global var, representing the position.
 volatile static uint8_t current_col_address = 0;// from from 0 to END_COL - START_COL
 volatile static uint8_t current_pag_address = 0;// from from 0 to END_PAG - START_PAGE
-
+// buffer ram, possibly locate in ext sram
+uint8_t oled_disp_buffer[128];
 void oled_wr_cmd(uint8_t cmd){
 	// write cmd to oled!! very important to add volatile
 	/*volatile char * const addr = OLED_ADDR_CMD_START;
@@ -123,6 +124,9 @@ void oled_init(void){
 	oled_wr_cmd(0xa4); //out follows RAM content
 	oled_wr_cmd(0xa6); //set normal display
 	oled_wr_cmd(0xaf); // display on
+	uint8_t i;
+	for(i = 0; i<128; i++)
+		oled_disp_buffer[i] = 0;
 }
 
 void oled_goto_xy(uint8_t col,uint8_t row){
@@ -160,7 +164,6 @@ void oled_putchar( char c){
 	for(i = 0; i < 5; i++){
 		 oled_wr_d(font[(int)c][i]);
 	}
-	oled_wr_d(0);
 }
 
 void oled_set_inverse(void){
@@ -209,4 +212,28 @@ int oled_putchar_printf(char var, FILE *stream){
 
 	oled_putchar(var);
 	return 0;
+}
+
+void oled_putchar_inverse(char c){
+	oled_putchar(~c);
+}
+
+void oled_buffer_wr(
+		uint8_t col,
+		uint8_t row,
+		uint8_t *data,
+		uint8_t length){
+	if(length<0 || length > (128 - row*16- col + 1))
+		return;
+	while(length--){
+		oled_disp_buffer[row*16+col] = *data;
+		data++;
+	}
+}
+void oled_buffer_update(void){
+	uint8_t i;
+	// maybe need some aligning modifications
+	for (i = 0; i<128; i++){
+		oled_wr_d(oled_disp_buffer[i]);
+	}
 }
