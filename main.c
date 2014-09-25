@@ -28,7 +28,7 @@ int main(void){
 	int temp;
 	//stdout = &usart_stdout;
 	usart_init(MYUBRR);
-	//init_lcd();
+	init_lcd();
 	oled_init();
 	_delay_ms(100);
 	oled_init();
