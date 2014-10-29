@@ -25,7 +25,7 @@
 static FILE usart_stdout =  FDEV_SETUP_STREAM(usart_putchar_printf, NULL, _FDEV_SETUP_WRITE);
 static FILE oled_stdout =  FDEV_SETUP_STREAM(lcm12864_putchar_printf, NULL, _FDEV_SETUP_WRITE);
 int main(void){
-	unsigned int temp,scroll=0,hor=0;
+	unsigned int temp,scroll=0,hor=0, ver=0;
 	//stdout = &usart_stdout;
 	usart_init(MYUBRR);
 	lcm_gr_init();
@@ -38,7 +38,7 @@ int main(void){
 	lcm_wr_cmd(0b00110100);
 	while(1){
 		temp = usart_getchar();
-		usart_putchar(temp);
+		fprintf(&usart_stdout,"input %c, ",temp);
 		if(temp==0x1B) {
 			lcm_gr_clr();// ESC clear
 		} else if(temp == 'a'){
@@ -47,18 +47,20 @@ int main(void){
 			lcm_gr_set_vertical_scroll(++scroll);
 		} else if(temp == 'g')
 		{
-			lcm_gr_clr();
-			lcm_gr_goto_16bit_addr(0,++hor);
-			lcm_wr_d(0xaa);
-			lcm_wr_d(0xff);
-
+			hor--;
 		}else if(temp == 'h'){
-			lcm_gr_clr();
-						lcm_gr_goto_16bit_addr(0,--hor);
-						lcm_wr_d(0xaa);
-						lcm_wr_d(0xff);
+			hor++;
+		}else if(temp == 'f')
+		{
+			ver++;
+		}else if(temp == 'v'){
+			ver--;
 		}
-
+		lcm_gr_goto_16bit_addr(hor,ver);
+		//for(temp=0;temp<64;temp++){
+			gr_draw_circle(hor+64,ver+32, 24, 1);
+		//}
+		fprintf(&usart_stdout," hor: %d, ver: %d .\n",hor,ver);
 	}
 	return 1;
 }

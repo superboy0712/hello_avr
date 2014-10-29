@@ -25,4 +25,5 @@ void lcm_gr_draw_pixel( uint8_t col, uint8_t row);
 void lcm_gr_set_vertical_scroll(uint8_t rows);
 int lcm12864_putchar_printf(char var, FILE *stream);
 void lcm_gr_clr(void);
+void gr_draw_circle(uint8_t x0, uint8_t y0, uint8_t r, uint8_t color);
 #endif /* LCM_12864_H_ */
