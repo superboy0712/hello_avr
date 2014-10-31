@@ -21,12 +21,14 @@
 #include "temp2/atmega_twi_driver.h"
 #include <avr/interrupt.h>
 
-#define SLAVE_ADDRESS 0b1010000
+#define SLAVE_ADDRESS 0b1001000
 static FILE usart_stdout =  FDEV_SETUP_STREAM(usart_putchar_printf, NULL, _FDEV_SETUP_WRITE);
 
 int main(void){
 	stdout = &usart_stdout;
 	usart_init(MYUBRR);
+	// control byte: analog off, 4 single ended, auto_incre off, channel 1
+	const unsigned char CONTROL_BYTE = 0b00000100;
 
 	uint8_t temp;
 	//unsigned char receivedData [1] = {0x00};
@@ -49,19 +51,14 @@ int main(void){
 		printf("status: %x \n\n", twi_get_state_info());
 
 		if(temp=='1'){
-			success = atmel_led_drvr_readarray(SLAVE_ADDRESS, 0, receivedData,8);
+			success = atmel_led_drvr_readarray(SLAVE_ADDRESS, CONTROL_BYTE, receivedData, 4);
 			if(!success){
 				printf("readarray: error! no transaction! \r\n");
 			} else{
 				receivedData[8] = '\0';
-				printf("readarray: %s \r\n", receivedData);
+				printf("read val: ch0: %d, ch1: %d, ch2: %d, ch3: %d \r\n", \
+						receivedData[1],receivedData[2],receivedData[3],receivedData[0]);
 			}
-		}else if('a' <= temp && temp <= 'z'){
-			//! Write/read a register
-			static uint8_t addr = 0;
-			success = atmel_led_drvr_writeregister(SLAVE_ADDRESS, addr, temp);
-			printf("writing %c to addr: %x \r\n", temp, addr);
-			addr++;
 		}
 	}
 	return 1;
