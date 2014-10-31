@@ -48,6 +48,20 @@
 
 #ifndef AT_MEGA_TWI_DRIVER
 #define AT_MEGA_TWI_DRIVER 
+//*********************************MEGAAVR TWI PARAMETERS************************************************************************
+
+/*! \brief Largest message size that will be sent/received excluding address byte and register address. When using array write/read functions, the count parameter can not exceed NUM_BYTES*/
+#define NUM_BYTES 16
+
+//BAUD RATE PARAMETERS
+//The SCL frequency is calculated as (CPU_CLOCK FREQ)/(16 + 2*TWBR*(4^TWPS))
+//User must select the follwing values carefully depeding on CPU clock and required frequency.
+//SCL frequency should be less than or equal to 100KHz for most users
+
+#define TWI_TWBR          0x40    //!< TWI Bit rate Register setting. for 12MHz CPU clock, 75 KHz SCL. See Application note for detailed information on setting this value.
+#define TWI_TWPS          0x00      //!<  This driver presumes prescaler = 00
+
+//***************************************************************************************************************************************
 
 /*! \brief Status register definitions */
 union TWI_statusReg                       // Status byte holding flags.
@@ -65,19 +79,18 @@ extern union TWI_statusReg TWI_statusReg;
 void twi_master_initialise( void );
 unsigned char twi_transceiver_busy( void );
 unsigned char twi_get_state_info( void );
-void twi_start_transceiver_with_data( unsigned char *msg, unsigned char msgSize, unsigned char slave_addr);
+void twi_start_transceiver_with_data( unsigned char * , unsigned char, unsigned char, unsigned char );
 void twi_start_transceiver( void );
-unsigned char twi_get_data_from_transceiver( unsigned char *msg, unsigned char msgSize );
-/*! port Macros */
-#define DDRSDA DDRC
-#define PORTSDA PORTC
-#define BITSDA 1
-#define DDRSCL DDRC
-#define PORTSCL PORTC
-#define BITSCL 0
-/*!	\brief Baud rate related macro. */
-#define TWI_TWBR 72 // 100 KHZ
-#define TWI_TWPS 0
+unsigned char twi_get_data_from_transceiver( unsigned char *, unsigned char );
+
+
+void atmel_led_drvr_init();
+unsigned char atmel_led_drvr_writeregister(unsigned char slave_address, unsigned char REG_ADDR, unsigned char REG_DATA);
+unsigned char atmel_led_drvr_readregister(unsigned char slave_address, unsigned char REG_ADDR, unsigned char* receivedData);
+unsigned char atmel_led_drvr_writearray(unsigned char slave_address, unsigned char REG_ADDR, unsigned char* Data, unsigned char count);
+unsigned char atmel_led_drvr_readarray(unsigned char slave_address, unsigned char REG_ADDR, unsigned char* Data, unsigned char count);
+
+
 /*! \brief Bit position for R/W bit in "address byte". */
 #define TWI_READ_BIT  0     
 
@@ -111,7 +124,7 @@ unsigned char twi_get_data_from_transceiver( unsigned char *msg, unsigned char m
 #define TWI_STX_ADR_ACK_M_ARB_LOST 0xB0  //!< Arbitration lost in SLA+R/W as Master; own SLA+R has been received; ACK has been returned
 #define TWI_STX_DATA_ACK           0xB8  //!< Data byte in TWDR has been transmitted; ACK has been received
 #define TWI_STX_DATA_NACK          0xC0  //!< Data byte in TWDR has been transmitted; NOT ACK has been received
-#define TWI_STX_DATA_ACK_LAST_BYTE 0xC8  //!< Last data byte in TWDR has been transmitted (TWEA = ??; ACK has been received
+#define TWI_STX_DATA_ACK_LAST_BYTE 0xC8  //!< Last data byte in TWDR has been transmitted (TWEA = �0�); ACK has been received
 
 /*TWI Slave Receiver status codes */
 #define TWI_SRX_ADR_ACK            0x60  //!< Own SLA+W has been received ACK has been returned
@@ -125,7 +138,7 @@ unsigned char twi_get_data_from_transceiver( unsigned char *msg, unsigned char m
 #define TWI_SRX_STOP_RESTART       0xA0  //!< A STOP condition or repeated START condition has been received while still addressed as Slave
 
 /*TWI Miscellaneous status codes */
-#define TWI_NO_STATE               0xF8  //!< No relevant state information available; TWINT = ??
+#define TWI_NO_STATE               0xF8  //!< No relevant state information available; TWINT = �0�
 #define TWI_BUS_ERROR              0x00  //!< Bus error due to an illegal START or STOP condition
 
 #endif

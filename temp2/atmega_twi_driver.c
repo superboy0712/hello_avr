@@ -46,11 +46,11 @@
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  *****************************************************************************/
 
-#include "atmega_twi_driver.h"
 #include <avr/io.h>
+#include <avr/interrupt.h>
+#include "atmega_twi_driver.h"
 /*! \brief Maximum number of bytes to send including slave address byte and register address byte. */
-#define NUM_BYTES 4
-#define TWI_BUFFER_SIZE NUM_BYTES+1
+#define TWI_BUFFER_SIZE NUM_BYTES+2
 /*
 * Global variables
 */
@@ -66,12 +66,6 @@ void twi_master_initialise(void)
   TWBR = TWI_TWBR;                                  // Set bit rate register (Baudrate). Defined in header file.
   TWSR = TWI_TWPS;                                  
   TWDR = 0xFF;                                      // Default content = SDA released.
-	// ! internal pull up input state of SDA and SCL
-	DDRSDA &= ~_BV(BITSDA);
-	PORTSDA |= _BV(BITSDA);
-  	
-	DDRSCL &= ~_BV(BITSCL);
-PORTSCL |= _BV(BITSCL);
   TWCR = (1<<TWEN)|                                 // Enable TWI-interface and release TWI pins.
          (0<<TWIE)|(0<<TWINT)|                      // Disable Interupt.
          (0<<TWEA)|(0<<TWSTA)|(0<<TWSTO)|           // No Signal requests.
@@ -101,7 +95,7 @@ unsigned char twi_get_state_info( void )
 * The function will hold execution (loop) until the TWI_ISR has completed with the previous operation,
 * then initialize the next operation and return.
 */
-void twi_start_transceiver_with_data( unsigned char *msg, unsigned char msgSize, unsigned char slave_addr)
+void twi_start_transceiver_with_data( unsigned char *msg, unsigned char msgSize, unsigned char slave_addr, unsigned char reg_addr )
 {
   unsigned char temp;
 
@@ -109,12 +103,13 @@ void twi_start_transceiver_with_data( unsigned char *msg, unsigned char msgSize,
 
   TWI_msgSize = msgSize+2;                        // Number of data to transmit.
   TWI_buf[0]  = slave_addr;
+  TWI_buf[1] = reg_addr;                       // Store slave address with R/W setting.;
   if (!(slave_addr & (TRUE<<TWI_READ_BIT) ))       // If it is a write operation, then also copy data.
   {
     if(msgSize)
 	{
-		for ( temp = 1; temp < msgSize+1; temp++ )
-			TWI_buf[ temp ] = msg[ temp - 1 ];
+		for ( temp = 2; temp < msgSize+2; temp++ )
+			TWI_buf[ temp ] = msg[ temp - 2 ];
 	}
 	
   }
@@ -164,6 +159,142 @@ unsigned char twi_get_data_from_transceiver( unsigned char *msg, unsigned char m
   }
   return( TWI_statusReg.lastTransOK );                                   
 }
+
+/*! \brief Initialize the Atmel LED driver driver module.
+ *  Internally calls the interface initialization and sets the interrupts associated
+ 
+ */
+void atmel_led_drvr_init()
+{
+	twi_master_initialise();
+	
+	//Enable Interrupt
+	sei();
+	
+	
+}
+
+/*! \brief Write a byte to a given register address.
+ *  \param slave_address			Hardwired address of the slave. Only bits [7:1] are used as address (7 bit address)
+ *  \param REG_ADDR                 Address of Atmel LED driver internal register.
+ *  \param REG_DATA                 Data to write to Atmel LED driver internal register.
+ *  \retval true  If transaction could be started.
+ *  \retval false If transaction could not be started.
+ */	
+unsigned char atmel_led_drvr_writeregister(unsigned char slave_address, unsigned char REG_ADDR, unsigned char REG_DATA)
+{
+
+	twi_start_transceiver_with_data( &REG_DATA, 1,  ((slave_address<<TWI_ADR_BITS) | (FALSE<<TWI_READ_BIT)), REG_ADDR );
+	
+	//check the state of TWI bus for errors
+	switch(twi_get_state_info())
+	{
+		case TWI_MTX_ADR_NACK:      // SLA+W has been tramsmitted and NACK received
+		case TWI_MRX_ADR_NACK:      // SLA+R has been tramsmitted and NACK received    
+		case TWI_MTX_DATA_NACK:     // Data byte has been tramsmitted and NACK received
+	    case TWI_BUS_ERROR:         // Bus error due to an illegal START or STOP condition
+			return 0; //fail
+		default:
+			return 1; //success
+	} 
+	
+}
+
+
+/*! \brief Write a register byte array starting at given register address.
+ *  \param	slave_address			Hardwired address of the slave. Only bits [7:1] are used as address (7 bit address)
+ *  \param REG_ADDR                 Address of Atmel LED driver internal register to start writing from.
+ *  \param Data                     Pointer to data array to write to Atmel LED driver internal registers.
+ *  \param count					Number of bytes to write
+ *  \retval true  If transaction could be started.
+ *  \retval false If transaction could not be started.
+ */
+unsigned char atmel_led_drvr_writearray(unsigned char slave_address, unsigned char REG_ADDR, unsigned char* Data, unsigned char count)
+{
+	twi_start_transceiver_with_data( Data, count, ((slave_address<<TWI_ADR_BITS) | (FALSE<<TWI_READ_BIT)), REG_ADDR );
+	
+	//check the state of TWI bus for errors
+	switch(twi_get_state_info())
+	{
+		case TWI_MTX_ADR_NACK:      // SLA+W has been tramsmitted and NACK received
+		case TWI_MRX_ADR_NACK:      // SLA+R has been tramsmitted and NACK received    
+		case TWI_MTX_DATA_NACK:     // Data byte has been tramsmitted and NACK received
+	    case TWI_BUS_ERROR:         // Bus error due to an illegal START or STOP condition
+			return 0; //fail
+		default:
+			return 1; //success
+	}
+}
+
+/*! \brief Read a byte from a given register address.
+ *  \param	slave_address			Hardwired address of the slave. Only bits [7:1] are used as address (7 bit address)
+ *  \param REG_ADDR                 Address of Atmel LED driver internal register.
+ *  \param receivedData             Pointer to where received data will be stored.
+ *  \retval true  If transaction could be started.
+ *  \retval false If transaction could not be started.
+ */	
+unsigned char atmel_led_drvr_readregister(unsigned char slave_address, unsigned char REG_ADDR, unsigned char* receivedData)
+{
+	unsigned char outData[TWI_BUFFER_SIZE];
+	twi_start_transceiver_with_data( 0, 0, (slave_address<<TWI_ADR_BITS) | (FALSE<<TWI_READ_BIT), REG_ADDR );
+		
+	twi_start_transceiver_with_data( 0, 0,  ((slave_address<<TWI_ADR_BITS) | (TRUE<<TWI_READ_BIT)),  REG_ADDR );
+	
+	twi_get_data_from_transceiver( outData, 2 );	
+	
+	//The result is contained in the second byte of TWI buffer. The first byte always contains the SLA+W
+	*receivedData = outData[1];
+	
+	//check the state of TWI bus for errors
+	switch(twi_get_state_info())
+	{
+		case TWI_MTX_ADR_NACK:      // SLA+W has been tramsmitted and NACK received
+		case TWI_MRX_ADR_NACK:      // SLA+R has been tramsmitted and NACK received    
+		case TWI_MTX_DATA_NACK:     // Data byte has been tramsmitted and NACK received
+	    case TWI_BUS_ERROR:         // Bus error due to an illegal START or STOP condition
+			return 0; //fail
+		default:
+			return 1; //success
+	} 
+}
+/*! \brief Read a register byte array starting at given register address.
+ *  \param	slave_address			Hardwired address of the slave. Only bits [7:1] are used as address (7 bit address)
+ *  \param REG_ADDR                 Address of Atmel LED driver internal register to start reading from.
+ *  \param Data                     Pointer to data array to store the read value of Atmel LED driver internal registers.
+ *  \param count					Number of bytes to read
+ *  \retval true  If transaction could be started.
+ *  \retval false If transaction could not be started.
+ */
+unsigned char atmel_led_drvr_readarray(unsigned char slave_address, unsigned char REG_ADDR, unsigned char* Data, unsigned char count)
+{
+	unsigned char outData[TWI_BUFFER_SIZE];
+	unsigned char index = 0;
+	
+	twi_start_transceiver_with_data( 0, 0, ((slave_address<<TWI_ADR_BITS) | (FALSE<<TWI_READ_BIT)), REG_ADDR );
+		
+	twi_start_transceiver_with_data( 0, count - 1, ((slave_address<<TWI_ADR_BITS) | (TRUE<<TWI_READ_BIT)), REG_ADDR );
+	
+	twi_get_data_from_transceiver( outData, count + 1 );	
+	
+	//The result is contained in the second byte onwards of TWI buffer. The first byte always contains the SLA+W
+	for(index = 0;index < count; index++)
+	{
+		Data[index] = outData[index + 1];
+	}	
+	
+	//check the state of TWI bus for errors
+	switch(twi_get_state_info())
+	{
+		case TWI_MTX_ADR_NACK:      // SLA+W has been tramsmitted and NACK received
+		case TWI_MRX_ADR_NACK:      // SLA+R has been tramsmitted and NACK received    
+		case TWI_MTX_DATA_NACK:     // Data byte has been tramsmitted and NACK received
+	    case TWI_BUS_ERROR:         // Bus error due to an illegal START or STOP condition
+			return FALSE; //fail
+		default:
+			return TRUE; //success
+	}
+	
+}	
 
 /*! \brief This function is the Interrupt Service Routine (ISR), and called when the TWI interrupt is triggered;
 * that is whenever a TWI event has occurred. This function should not be called directly from the main
@@ -230,7 +361,7 @@ ISR(TWI_vect)
     case TWI_MTX_ADR_NACK:      // SLA+W has been tramsmitted and NACK received
     case TWI_MRX_ADR_NACK:      // SLA+R has been tramsmitted and NACK received    
     case TWI_MTX_DATA_NACK:     // Data byte has been tramsmitted and NACK received
-//    case TWI_NO_STATE              // No relevant state information available; TWINT = ??
+//    case TWI_NO_STATE              // No relevant state information available; TWINT = �0�
     case TWI_BUS_ERROR:         // Bus error due to an illegal START or STOP condition
     default:     
       TWI_state = TWSR;                                 // Store TWSR and automatically sets clears noErrors bit.

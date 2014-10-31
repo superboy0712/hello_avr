@@ -18,49 +18,51 @@
 #include "lcm_12864.h"
 #include "oled.h"
 #include <avr/sfr_defs.h>
+#include "temp2/atmega_twi_driver.h"
+#include <avr/interrupt.h>
 
-#define USART_BAUD 19200
-#define MYUBRR F_CPU/16/USART_BAUD-1
-
+#define SLAVE_ADDRESS 0b1010000
 static FILE usart_stdout =  FDEV_SETUP_STREAM(usart_putchar_printf, NULL, _FDEV_SETUP_WRITE);
-static FILE oled_stdout =  FDEV_SETUP_STREAM(lcm12864_putchar_printf, NULL, _FDEV_SETUP_WRITE);
+
 int main(void){
-	unsigned int temp,scroll=0,hor=0, ver=0;
-	//stdout = &usart_stdout;
+	stdout = &usart_stdout;
 	usart_init(MYUBRR);
-	lcm_gr_init();
-	lcm_gr_clr();
-	oled_init();
-	_delay_ms(100);
-	oled_init();
-	oled_clear();
-	oled_putstr("hello this is a ridiculously long long text string! enjoy it ! only for testing the line character alignment. I love you!!!");
-	lcm_wr_cmd(0b00110100);
+
+	uint8_t temp;
+	//unsigned char receivedData [1] = {0x00};
+	unsigned char success = 0x0;
+
+	//Test
+	//unsigned char Data[16];
+	unsigned char receivedData [16];
+
+	//! Initialize the driver
+	atmel_led_drvr_init();
+//	for(success = 0; success < 16;success++)
+//	{
+//		Data[success] = success+16;
+//	}
+
 	while(1){
 		temp = usart_getchar();
-		fprintf(&usart_stdout,"input %c, ",temp);
-		if(temp==0x1B) {
-			lcm_gr_clr();// ESC clear
-		} else if(temp == 'a'){
-			lcm_gr_set_vertical_scroll(--scroll);
-		} else if(temp == 'z'){
-			lcm_gr_set_vertical_scroll(++scroll);
-		} else if(temp == 'g')
-		{
-			hor--;
-		}else if(temp == 'h'){
-			hor++;
-		}else if(temp == 'f')
-		{
-			ver++;
-		}else if(temp == 'v'){
-			ver--;
+		printf("input %c, ",temp);
+		printf("status: %x \n\n", twi_get_state_info());
+
+		if(temp=='1'){
+			success = atmel_led_drvr_readarray(SLAVE_ADDRESS, 0, receivedData,8);
+			if(!success){
+				printf("readarray: error! no transaction! \r\n");
+			} else{
+				receivedData[8] = '\0';
+				printf("readarray: %s \r\n", receivedData);
+			}
+		}else if('a' <= temp && temp <= 'z'){
+			//! Write/read a register
+			static uint8_t addr = 0;
+			success = atmel_led_drvr_writeregister(SLAVE_ADDRESS, addr, temp);
+			printf("writing %c to addr: %x \r\n", temp, addr);
+			addr++;
 		}
-		lcm_gr_goto_16bit_addr(hor,ver);
-		//for(temp=0;temp<64;temp++){
-			gr_draw_circle(hor+64,ver+32, 24, 1);
-		//}
-		fprintf(&usart_stdout," hor: %d, ver: %d .\n",hor,ver);
 	}
 	return 1;
 }
